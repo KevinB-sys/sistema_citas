@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Registrarse - Sistema de Citas Médicas{% endblock %}
+
+{% block content %}
+<div class="container py-5 mt-5"> {# Agregado mt-5 para espacio debajo de la barra de navegación fija #}
+    <div class="row justify-content-center">
+        <div class="col-md-7 col-lg-6"> {# Columna un poco más ancha para más campos #}
+            <div class="card p-4 shadow-lg">
+                <div class="card-body">
+                    <h2 class="text-center mb-4">Crear Cuenta</h2>
+                    <form id="register-form">
+                        <div class="mb-3">
+                            <label for="nombre" class="form-label">Nombre Completo</label>
+                            <input type="text" class="form-control" id="nombre" name="nombre" placeholder="Tu nombre" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Correo Electrónico</label>
+                            <input type="email" class="form-control" id="email" name="email" placeholder="tu@ejemplo.com" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Contraseña</label>
+                            <input type="password" class="form-control" id="password" name="password" placeholder="Crea una contraseña segura" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="telefono" class="form-label">Teléfono (opcional)</label>
+                            <input type="text" class="form-control" id="telefono" name="telefono" placeholder="Ej: 0991234567">
+                        </div>
+                        <div class="mb-3">
+                            <label for="fecha_nacimiento" class="form-label">Fecha de Nacimiento (opcional)</label>
+                            <input type="date" class="form-control" id="fecha_nacimiento" name="fecha_nacimiento">
+                        </div>
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg">Registrarse</button>
+                        </div>
+                    </form>
+                    <div id="mensaje" class="mt-3 text-center"></div>
+                    <p class="text-center mt-3">
+                        ¿Ya tienes una cuenta? <a href="{{ url_for('login') }}" class="text-decoration-none">Inicia sesión aquí</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const form = document.getElementById('register-form');
+    const mensaje = document.getElementById('mensaje');
+
+    form.addEventListener('submit', async e => {
+        e.preventDefault();
+
+        const formData = new FormData(form);
+        const data = {
+            nombre: formData.get('nombre'),
+            email: formData.get('email'),
+            password: formData.get('password'),
+            telefono: formData.get('telefono'),
+            fecha_nacimiento: formData.get('fecha_nacimiento')
+        };
+
+        try {
+            const response = await fetch('/register', { // Asegúrate de que esta URL coincida con tu ruta
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                mensaje.className = 'alert alert-success';
+                mensaje.textContent = result.message;
+                setTimeout(() => {
+                    window.location.href = result.redirect || '/login'; // Redirigir al login o a la home
+                }, 1500);
+            } else {
+                mensaje.className = 'alert alert-danger';
+                mensaje.textContent = result.error || 'Error en el registro. Por favor, verifica tus datos.';
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            mensaje.className = 'alert alert-danger';
+            mensaje.textContent = 'Error de conexión con el servidor. Por favor, inténtalo más tarde.';
+        }
+    });
+</script>
+{% endblock %}

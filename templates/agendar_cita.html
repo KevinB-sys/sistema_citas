@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}Agendar Cita - Sistema de Citas Médicas{% endblock %}
+
+{% block content %}
+<div class="container py-5 mt-5"> {# Added mt-5 for spacing below the fixed navbar #}
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-7">
+            <div class="card p-4 shadow-lg">
+                <div class="card-body">
+                    <h2 class="text-center mb-4">Agendar Nueva Cita</h2>
+                    <form id="form-agendar">
+                        <div class="mb-3">
+                            <label for="especialidad" class="form-label">Especialidad:</label>
+                            <select id="especialidad" name="especialidad" class="form-select" required>
+                                <option value="">Seleccione una especialidad</option>
+                                {# Options will be loaded by JavaScript #}
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="medico" class="form-label">Médico:</label>
+                            <select id="medico" name="medico" class="form-select" required>
+                                <option value="">Seleccione un médico</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="fecha" class="form-label">Fecha:</label>
+                            <input type="date" id="fecha" name="fecha" class="form-control" required min="{{ min_date if min_date else '' }}">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="horario" class="form-label">Horario:</label>
+                            <select id="horario" name="horario" class="form-select" required>
+                                <option value="">Seleccione un horario</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="motivo" class="form-label">Motivo de la Cita (opcional):</label>
+                            <textarea id="motivo" name="motivo" rows="3" class="form-control" placeholder="Ej: Control general, revisión, etc."></textarea>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-calendar-check me-2"></i>Confirmar Cita
+                            </button>
+                        </div>
+                    </form>
+                    <div id="mensaje" class="mt-4 text-center"></div> {# For displaying success/error messages #}
+                    <div class="text-center mt-4">
+                        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
+                            <i class="fas fa-arrow-left me-2"></i>Volver a mi área
+                        </a>
+                        <a href="{{ url_for('buscar_medicos') }}" class="btn btn-outline-info ms-3">
+                            <i class="fas fa-search me-2"></i>Buscar otro médico
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Moved the 'medicos' array and functions into this block
+    let medicos = [];
+    const mensajeDiv = document.getElementById('mensaje'); // Get the message div
+
+    async function cargarEspecialidades() {
+        try {
+            const res = await fetch('/api/especialidades'); // Ensure this API endpoint is correct
+            if (!res.ok) throw new Error('Error al cargar especialidades');
+            const especialidades = await res.json();
+
+            const select = document.getElementById('especialidad');
+            select.innerHTML = '<option value="">Seleccione una especialidad</option>';
+
+            especialidades.forEach(e => {
+                const option = document.createElement('option');
+                option.value = e.id;
+                option.textContent = e.nombre;
+                select.appendChild(option);
+            });
+        } catch (error) {
+            console.error("Error cargando especialidades:", error);
+            mensajeDiv.className = 'alert alert-danger';
+            mensajeDiv.textContent = 'No se pudieron cargar las especialidades.';
+        }
+    }
+
+    async function cargarMedicos() {
+        const especialidadId = document.getElementById('especialidad').value;
+        const medicoSelect = document.getElementById('medico');
+        medicoSelect.innerHTML = '<option value="">Seleccione un médico</option>';
+        document.getElementById('fecha').value = ''; // Clear date when medico changes
+        document.getElementById('horario').innerHTML = '<option value="">Seleccione un horario</option>';
+        mensajeDiv.textContent = ''; // Clear messages
+
+        if (!especialidadId) return;
+
+        try {
+            const res = await fetch(`/api/medicos/${especialidadId}`); // Ensure this API endpoint is correct
+            if (!res.ok) throw new Error('Error al cargar médicos');
+            medicos = await res.json();
+
+            medicos.forEach(m => {
+                const option = document.createElement('option');
+                option.value = m.id;
+                option.textContent = m.nombre;
+                medicoSelect.appendChild(option);
+            });
+        } catch (error) {
+            console.error("Error cargando médicos:", error);
+            mensajeDiv.className = 'alert alert-danger';
+            mensajeDiv.textContent = 'No se pudieron cargar los médicos para esta especialidad.';
+        }
+    }
+
+    async function cargarHorarios() {
+        const medicoId = document.getElementById('medico').value;
+        const fecha = document.getElementById('fecha').value;
+        const horarioSelect = document.getElementById('horario');
+        horarioSelect.innerHTML = '<option value="">Seleccione un horario</option>';
+        mensajeDiv.textContent = ''; // Clear messages
+
+        if (!medicoId || !fecha) return;
+
+        try {
+            // Llamar API para horarios disponibles
+            const res = await fetch(`/buscar-horarios?medico_id=${medicoId}&fecha=${fecha}`); // Ensure this API endpoint is correct
+            if (!res.ok) throw new Error('Error al cargar horarios');
+            const data = await res.json();
+
+            if (data.horarios && data.horarios.length > 0) {
+                data.horarios.forEach(h => {
+                    const option = document.createElement('option');
+                    option.value = h;
+                    option.textContent = h;
+                    horarioSelect.appendChild(option);
+                });
+            } else {
+                horarioSelect.innerHTML = '<option value="">No hay horarios disponibles para esta fecha.</option>';
+                mensajeDiv.className = 'alert alert-warning';
+                mensajeDiv.textContent = 'No se encontraron horarios disponibles para la fecha seleccionada.';
+            }
+        } catch (error) {
+            console.error("Error cargando horarios:", error);
+            mensajeDiv.className = 'alert alert-danger';
+            mensajeDiv.textContent = 'No se pudieron cargar los horarios disponibles.';
+        }
+    }
+
+    async function enviarFormulario(event) {
+        event.preventDefault();
+        mensajeDiv.textContent = ''; // Clear previous messages
+
+        const medicoId = document.getElementById('medico').value;
+        const fecha = document.getElementById('fecha').value;
+        const hora = document.getElementById('horario').value;
+        const motivo = document.getElementById('motivo').value;
+
+        if (!medicoId || !fecha || !hora) {
+            mensajeDiv.className = 'alert alert-danger';
+            mensajeDiv.textContent = 'Por favor, complete todos los campos obligatorios (Especialidad, Médico, Fecha y Horario).';
+            return;
+        }
+
+        try {
+            const res = await fetch('/agendar-cita', { // Ensure this API endpoint is correct
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ medico_id: medicoId, fecha, hora, motivo })
+            });
+
+            const result = await res.json();
+
+            if (res.ok) {
+                mensajeDiv.className = 'alert alert-success';
+                mensajeDiv.textContent = result.message;
+                setTimeout(() => {
+                    window.location.href = result.redirect || '/dashboard'; // Redirect to dashboard or home
+                }, 1500);
+            } else {
+                mensajeDiv.className = 'alert alert-danger';
+                mensajeDiv.textContent = result.error || 'Error al agendar la cita. Por favor, inténtalo de nuevo.';
+            }
+        } catch (error) {
+            console.error("Error al enviar formulario:", error);
+            mensajeDiv.className = 'alert alert-danger';
+            mensajeDiv.textContent = 'Error de conexión con el servidor al agendar la cita.';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        cargarEspecialidades();
+        document.getElementById('especialidad').addEventListener('change', cargarMedicos);
+        document.getElementById('medico').addEventListener('change', cargarHorarios);
+        document.getElementById('fecha').addEventListener('change', cargarHorarios);
+        document.getElementById('form-agendar').addEventListener('submit', enviarFormulario);
+
+        // If medico_id and fecha_hora are passed as URL parameters (e.g., from buscar_medicos)
+        // You might want to pre-fill the form fields and trigger loads here.
+        // This part would depend on how your Flask/Django route passes initial data.
+        const urlParams = new URLSearchParams(window.location.search);
+        const initialMedicoId = urlParams.get('medico_id');
+        const initialFechaHora = urlParams.get('fecha_hora'); // This might contain date and time
+
+        if (initialMedicoId && initialFechaHora) {
+            // This is a more complex scenario.
+            // You'd need to:
+            // 1. Get the medico's specialty to pre-select the specialty dropdown.
+            // 2. Set the medico dropdown.
+            // 3. Set the date dropdown (extract date from initialFechaHora).
+            // 4. Then call cargarHorarios().
+            // 5. Finally, select the specific hour.
+            // This requires additional API calls or passing more data from Flask/Django.
+            // For simplicity, I'm omitting the full pre-fill logic for dynamic fields for now,
+            // as it requires more backend context on how initial data is provided.
+            // If you need this, we can discuss it.
+        }
+    });
+</script>
+{% endblock %}

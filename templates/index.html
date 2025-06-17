@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}Inicio - Sistema de Citas Médicas{% endblock %}
+
+{% block content %}
+<div class="hero-section py-5 text-white text-center" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+    <div class="container">
+        <h1 class="display-4 mb-4">Sistema de Citas Médicas</h1>
+        <p class="lead mb-4">Agenda tu cita médica de forma rápida y sencilla</p>
+        {% if not current_user.is_authenticated %}
+        <a href="{{ url_for('register') }}" class="btn btn-light btn-lg me-3">Registrarse</a>
+        <a href="{{ url_for('login') }}" class="btn btn-outline-light btn-lg">Iniciar Sesión</a>
+        {% else %}
+        <a href="{{ url_for('buscar_medicos') }}" class="btn btn-light btn-lg">Buscar Médicos</a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="container py-5">
+    <div class="row">
+        <!-- Tarjetas informativas -->
+        <div class="col-md-4 mb-4">
+            <div class="card h-100 text-center">
+                <div class="card-body">
+                    <i class="fas fa-user-md fa-3x text-primary mb-3"></i>
+                    <h5 class="card-title">Encuentra tu Médico</h5>
+                    <p class="card-text">Busca médicos por especialidad y encuentra el profesional que necesitas.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-4">
+            <div class="card h-100 text-center">
+                <div class="card-body">
+                    <i class="fas fa-calendar-check fa-3x text-primary mb-3"></i>
+                    <h5 class="card-title">Agenda tu Cita</h5>
+                    <p class="card-text">Selecciona el horario que mejor se adapte a tu disponibilidad.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-4">
+            <div class="card h-100 text-center">
+                <div class="card-body">
+                    <i class="fas fa-mobile-alt fa-3x text-primary mb-3"></i>
+                    <h5 class="card-title">Acceso Multiplataforma</h5>
+                    <p class="card-text">Accede desde cualquier dispositivo: móvil, tablet o computadora.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if especialidades %}
+    <div class="row mt-5">
+        <div class="col-12">
+            <h2 class="text-center mb-4">Especialidades Disponibles</h2>
+            <div class="row">
+                {% for especialidad in especialidades %}
+                <div class="col-md-3 col-sm-6 mb-3">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">{{ especialidad.nombre }}</h6>
+                            <p class="card-text small">{{ especialidad.descripcion }}</p>
+                            {% if current_user.is_authenticated %}
+                            <a href="{{ url_for('buscar_medicos', especialidad_id=especialidad.id) }}" 
+                               class="btn btn-primary btn-sm">Ver Médicos</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
