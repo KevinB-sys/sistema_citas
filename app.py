@@ -279,34 +279,54 @@ def get_horarios_disponibles(medico, fecha):
 @with_lock
 def agendar_cita():
     data = request.get_json() or request.form
-    
+
     medico_id = data.get('medico_id')
     fecha = data.get('fecha')
     hora = data.get('hora')
     motivo = data.get('motivo', '')
-    
-    if not all([medico_id, fecha, hora]):
-        return jsonify({'error': 'Faltan datos obligatorios'}), 400
-    
+
+    if not medico_id:
+        return jsonify({'error': f'{current_user.nombre}: Debe seleccionar un médico para agendar la cita.'}), 400
+    if not fecha:
+        return jsonify({'error': f'{current_user.nombre}: Debe especificar una fecha para la cita.'}), 400
+    if not hora:
+        return jsonify({'error': f'{current_user.nombre}: Debe especificar una hora para la cita.'}), 400
+
     try:
-        # Verificar que el médico existe
+        # Verificar que el médico existe y está activo
         medico = Medico.query.get(medico_id)
-        if not medico or not medico.activo:
-            return jsonify({'error': 'Médico no disponible'}), 400
-        
-        # Crear fecha y hora de la cita
-        fecha_hora = datetime.strptime(f"{fecha} {hora}", '%Y-%m-%d %H:%M')
-        
-        # Verificar que la fecha/hora está disponible
+        if not medico:
+            return jsonify({'error': f'{current_user.nombre}: El médico con ID {medico_id} no existe.'}), 404
+        if not medico.activo:
+            return jsonify({'error': f'{current_user.nombre}: El médico {medico.nombre} no está activo.'}), 400
+
+        # Crear datetime con fecha y hora
+        try:
+            fecha_hora = datetime.strptime(f"{fecha} {hora}", '%Y-%m-%d %H:%M')
+        except ValueError:
+            return jsonify({'error': f'{current_user.nombre}: El formato de fecha u hora es inválido.'}), 400
+
+        if fecha_hora < datetime.now():
+            return jsonify({'error': f'{current_user.nombre}: No puede agendar una cita en el pasado ({fecha} {hora}).'}), 400
+
+        # Verificar disponibilidad
         cita_existente = Cita.query.filter(
             Cita.medico_id == medico_id,
             Cita.fecha_hora == fecha_hora,
             Cita.estado == 'programada'
         ).first()
-        
+
         if cita_existente:
-            return jsonify({'error': 'El horario ya está ocupado'}), 400
-        
+            return jsonify({
+                'error': f'{current_user.nombre}: El horario {hora} del {fecha} ya está ocupado para el Dr./Dra. {medico.nombre}.',
+                'detalle': {
+                    'paciente': current_user.nombre,
+                    'medico': medico.nombre,
+                    'fecha': fecha,
+                    'hora': hora
+                }
+            }), 409
+
         # Crear nueva cita
         nueva_cita = Cita(
             paciente_id=current_user.id,
@@ -314,19 +334,34 @@ def agendar_cita():
             fecha_hora=fecha_hora,
             motivo=motivo
         )
-        
+
         db.session.add(nueva_cita)
         db.session.commit()
-        
+
         return jsonify({
-            'message': 'Cita agendada exitosamente',
+            'message': f'Cita agendada exitosamente para {current_user.nombre} con el Dr./Dra. {medico.nombre} el {fecha} a las {hora}.',
             'cita_id': nueva_cita.id,
+            'detalle': {
+                'paciente': current_user.nombre,
+                'medico': medico.nombre,
+                'fecha': fecha,
+                'hora': hora,
+                'motivo': motivo
+            },
             'redirect': url_for('mis_citas')
         })
-        
+
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': 'Error al agendar la cita'}), 500
+        return jsonify({
+            'error': f'{current_user.nombre}: Error interno al agendar la cita con el Dr./Dra. {medico.nombre if medico else "desconocido"} el {fecha} a las {hora}.',
+            'detalle': str(e),
+            'paciente': current_user.nombre,
+            'fecha': fecha,
+            'hora': hora
+        }), 500
+
+
 
 # @app.route('/mis-citas')
 # @login_required
@@ -427,6 +462,157 @@ def init_db():
             
             db.session.commit()
             print("Base de datos inicializada con datos de prueba")
+
+@app.route('/admin/cancelar-todas-citas', methods=['POST'])
+@login_required
+def cancelar_todas_las_citas():
+    """
+    Ruta para cancelar todas las citas con estado 'programada' en la base de datos.
+    Solo debe ser accesible por administradores en un entorno real.
+    """
+    try:
+        # Obtener todas las citas programadas
+        citas_programadas = Cita.query.filter_by(estado='programada').all()
+        
+        if not citas_programadas:
+            return jsonify({
+                'message': 'No hay citas programadas para cancelar',
+                'citas_canceladas': 0
+            }), 200
+        
+        # Contar las citas antes de cancelar
+        total_citas = len(citas_programadas)
+        
+        # Cancelar todas las citas programadas
+        Cita.query.filter_by(estado='programada').update({'estado': 'cancelada'})
+        
+        # Confirmar los cambios
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'Se han cancelado exitosamente {total_citas} citas programadas',
+            'citas_canceladas': total_citas,
+            'timestamp': datetime.now().isoformat()
+        }), 200
+        
+    except Exception as e:
+        # Revertir cambios en caso de error
+        db.session.rollback()
+        return jsonify({
+            'error': 'Error interno al cancelar las citas',
+            'detalle': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 500
+
+
+@app.route('/admin/cancelar-todas-citas-confirmacion', methods=['GET'])
+@login_required
+def cancelar_todas_citas_confirmacion():
+    """
+    Ruta GET para mostrar información sobre las citas que se cancelarían
+    """
+    try:
+        # Contar citas programadas
+        total_citas = Cita.query.filter_by(estado='programada').count()
+        
+        # Obtener información detallada de las citas
+        citas_info = db.session.query(
+            Cita.id,
+            User.nombre.label('paciente'),
+            Medico.nombre.label('medico'),
+            Cita.fecha_hora,
+            Cita.motivo
+        ).join(User, Cita.paciente_id == User.id)\
+         .join(Medico, Cita.medico_id == Medico.id)\
+         .filter(Cita.estado == 'programada')\
+         .order_by(Cita.fecha_hora).all()
+        
+        citas_lista = []
+        for cita in citas_info:
+            citas_lista.append({
+                'id': cita.id,
+                'paciente': cita.paciente,
+                'medico': cita.medico,
+                'fecha_hora': cita.fecha_hora.strftime('%Y-%m-%d %H:%M'),
+                'motivo': cita.motivo or 'Sin motivo especificado'
+            })
+        
+        return jsonify({
+            'total_citas_programadas': total_citas,
+            'citas': citas_lista,
+            'mensaje': f'Se encontraron {total_citas} citas programadas que serían canceladas'
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'error': 'Error al obtener información de las citas',
+            'detalle': str(e)
+        }), 500
+
+
+# Ruta alternativa más segura que requiere confirmación explícita
+@app.route('/admin/cancelar-todas-citas-seguro', methods=['POST'])
+@login_required
+def cancelar_todas_citas_seguro():
+    """
+    Versión más segura que requiere confirmación explícita
+    """
+    data = request.get_json() or request.form
+    confirmacion = data.get('confirmar_cancelacion')
+    
+    if confirmacion != 'SI_CANCELAR_TODAS':
+        return jsonify({
+            'error': 'Se requiere confirmación explícita',
+            'mensaje': 'Para cancelar todas las citas, envíe "confirmar_cancelacion": "SI_CANCELAR_TODAS"'
+        }), 400
+    
+    try:
+        # Obtener todas las citas programadas con información detallada
+        citas_programadas = db.session.query(Cita, User.nombre, Medico.nombre)\
+            .join(User, Cita.paciente_id == User.id)\
+            .join(Medico, Cita.medico_id == Medico.id)\
+            .filter(Cita.estado == 'programada').all()
+        
+        if not citas_programadas:
+            return jsonify({
+                'message': 'No hay citas programadas para cancelar',
+                'citas_canceladas': 0
+            }), 200
+        
+        total_citas = len(citas_programadas)
+        
+        # Crear lista de citas canceladas para el log
+        citas_canceladas_info = []
+        for cita_info in citas_programadas:
+            cita, paciente_nombre, medico_nombre = cita_info
+            citas_canceladas_info.append({
+                'id': cita.id,
+                'paciente': paciente_nombre,
+                'medico': medico_nombre,
+                'fecha_hora': cita.fecha_hora.strftime('%Y-%m-%d %H:%M'),
+                'motivo': cita.motivo
+            })
+        
+        # Cancelar todas las citas programadas
+        Cita.query.filter_by(estado='programada').update({'estado': 'cancelada'})
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'Se han cancelado exitosamente {total_citas} citas programadas',
+            'citas_canceladas': total_citas,
+            'citas_info': citas_canceladas_info,
+            'timestamp': datetime.now().isoformat(),
+            'cancelado_por': current_user.nombre
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'error': 'Error interno al cancelar las citas',
+            'detalle': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 500
+
 
 if __name__ == '__main__':
     init_db()
