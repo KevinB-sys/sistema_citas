@@ -92,104 +92,113 @@ Médicas{% endblock %} {% block content %}
     }
 
     async function cargarCitas() {
+        const tbody = document.getElementById("citas-body");
+        const mensajeDiv = document.getElementById("mensaje");
+
         try {
-            const response = await fetch("/mis-citas-json", {
-                // Ensure this URL matches your backend route
-                headers: { Accept: "application/json" },
-            });
-            if (!response.ok) {
-                // Check if it's a 404 or other client error for more specific messages
-                if (response.status === 404) {
-                    throw new Error("La ruta de las citas no fue encontrada.");
-                }
-                throw new Error(
-                    `Error ${response.status}: ${response.statusText}`
-                );
-            }
+            // Mostrar estado de carga
+            tbody.innerHTML =
+                '<tr><td colspan="5" class="text-center">Cargando citas...</td></tr>';
+
+            console.log("Iniciando carga de citas...");
+            const response = await fetch("/mis-citas-json");
+            console.log("Respuesta recibida:", response.status);
+
             const data = await response.json();
+            console.log("Datos recibidos:", data);
 
-            const tbody = document.getElementById("citas-body");
-            tbody.innerHTML = ""; // Clear existing rows
+            // Limpiar mensaje anterior
+            mensajeDiv.innerHTML = "";
 
-            if (data.citas.length === 0) {
+            if (!response.ok) {
+                throw new Error(data.error || "Error al cargar las citas");
+            }
+
+            tbody.innerHTML = "";
+
+            if (!data.citas || data.citas.length === 0) {
                 tbody.innerHTML =
-                    '<tr><td colspan="5" class="text-center text-muted py-3">No tienes citas programadas.</td></tr>';
+                    '<tr><td colspan="5" class="text-center">No tienes citas programadas</td></tr>';
                 return;
             }
 
-            const now = new Date();
-
             data.citas.forEach((cita) => {
-                const tr = document.createElement("tr");
-                let estadoBadgeClass = "";
-                let canCancel = false;
-                const citaFechaHora = new Date(cita.fecha_hora);
+                try {
+                    console.log("Procesando cita:", cita);
+                    const tr = document.createElement("tr");
 
-                // Determine badge class and cancelability based on state and future date
-                if (cita.estado === "programada") {
-                    if (citaFechaHora > now) {
-                        estadoBadgeClass = "bg-primary"; // Future appointment
-                        canCancel = true;
-                    } else {
-                        estadoBadgeClass = "bg-info"; // Past scheduled, but not yet 'completada'
+                    // Formatear la fecha de manera segura
+                    let fechaFormateada;
+                    try {
+                        fechaFormateada = new Date(
+                            cita.fecha_hora
+                        ).toLocaleString("es-ES", {
+                            year: "numeric",
+                            month: "2-digit",
+                            day: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                        });
+                    } catch (e) {
+                        console.error("Error al formatear fecha:", e);
+                        fechaFormateada =
+                            cita.fecha_hora || "Fecha no disponible";
                     }
-                } else if (cita.estado === "confirmada") {
-                    estadoBadgeClass = "bg-success";
-                    if (citaFechaHora > now) {
-                        canCancel = true;
+
+                    // Crear badge para el estado
+                    let estadoBadgeClass = "";
+                    switch (cita.estado) {
+                        case "programada":
+                            estadoBadgeClass = "bg-primary";
+                            break;
+                        case "completada":
+                            estadoBadgeClass = "bg-success";
+                            break;
+                        case "cancelada":
+                            estadoBadgeClass = "bg-danger";
+                            break;
+                        default:
+                            estadoBadgeClass = "bg-secondary";
                     }
-                } else if (cita.estado === "cancelada") {
-                    estadoBadgeClass = "bg-danger";
-                } else if (cita.estado === "completada") {
-                    estadoBadgeClass = "bg-secondary";
-                } else {
-                    estadoBadgeClass = "bg-warning text-dark"; // Default or unknown status
+
+                    tr.innerHTML = `
+                        <td>${cita.medico_nombre || "Médico no disponible"}</td>
+                        <td>${fechaFormateada}</td>
+                        <td>${
+                            cita.motivo || "<em>Sin motivo especificado</em>"
+                        }</td>
+                        <td><span class="badge ${estadoBadgeClass}">${
+                        cita.estado || "desconocido"
+                    }</span></td>
+                        <td>
+                            ${
+                                cita.estado === "programada"
+                                    ? `<button class="btn btn-sm btn-danger" onclick="cancelarCita(${cita.id})">
+                                        <i class="fas fa-times-circle"></i> Cancelar
+                                       </button>`
+                                    : "-"
+                            }
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                } catch (e) {
+                    console.error("Error procesando cita:", e, cita);
                 }
-
-                // Format date and time
-                const options = {
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                };
-                const formattedDateTime = citaFechaHora.toLocaleDateString(
-                    "es-ES",
-                    options
-                );
-
-                tr.innerHTML = `
-                    <td>${cita.medico_nombre}</td>
-                    <td>${formattedDateTime}</td>
-                    <td>${
-                        cita.motivo ||
-                        '<span class="text-muted">Sin motivo</span>'
-                    }</td>
-                    <td><span class="badge ${estadoBadgeClass}">${
-                    cita.estado.charAt(0).toUpperCase() + cita.estado.slice(1)
-                }</span></td>
-                    <td>
-                        ${
-                            canCancel
-                                ? `<button class="btn btn-sm btn-danger" onclick="cancelarCita(${cita.id})">
-                                <i class="fas fa-times-circle me-1"></i>Cancelar
-                              </button>`
-                                : '<span class="text-muted">-</span>'
-                        }
-                    </td>
-                `;
-                tbody.appendChild(tr);
             });
         } catch (error) {
-            console.error("Error al cargar las citas:", error);
-            mensajeDiv.className = "alert alert-danger";
-            mensajeDiv.textContent =
-                "Error al cargar tus citas: " + error.message;
+            console.error("Error al cargar citas:", error);
+            mensajeDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    Error al cargar las citas: ${error.message}
+                </div>
+            `;
+            tbody.innerHTML =
+                '<tr><td colspan="5" class="text-center text-danger">Error al cargar las citas</td></tr>';
         }
     }
 
     document.addEventListener("DOMContentLoaded", () => {
+        console.log("Página cargada, iniciando carga de citas...");
         cargarCitas();
     });
 </script>
