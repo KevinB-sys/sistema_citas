@@ -49,3 +49,48 @@ def test_buscar_medicos_playwright():
         print("✅ Búsqueda de médicos exitosa (Headless)")
         
         browser.close()
+
+def test_login_playwright():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=False)
+        page = browser.new_page()
+        page.goto("http://localhost:5000/login")
+        page.fill("#email", "usuario@ejemplo.com")
+        page.fill("#password", "password123")
+        page.click("button[type='submit']")
+        page.wait_for_url("**/dashboard")
+        assert page.is_visible("h1:has-text('Bienvenido')")
+        print("✅ Login Playwright exitoso")
+        browser.close()
+
+def test_registro_playwright():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=False)
+        page = browser.new_page()
+        page.goto("http://localhost:5000/register")
+        page.fill("#nombre", "Usuario Ejemplo")
+        page.fill("#email", "usuario@ejemplo.com")
+        page.fill("#password", "password123")
+        page.fill("#telefono", "0999999999")
+        page.click("button[type='submit']")
+        page.wait_for_url("**/dashboard")
+        assert page.is_visible("h1:has-text('Bienvenido')")
+        print("✅ Registro Playwright exitoso")
+        browser.close()
+
+def test_cancelar_cita_playwright():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=False)
+        page = browser.new_page()
+        page.goto("http://localhost:5000/login")
+        page.fill("#email", "usuario@ejemplo.com")
+        page.fill("#password", "password123")
+        page.click("button[type='submit']")
+        page.wait_for_url("**/dashboard")
+        page.click("text=Mis Citas")
+        page.wait_for_selector("button:has-text('Cancelar')")
+        page.click("button:has-text('Cancelar')")
+        page.wait_for_selector(".alert-success")
+        assert page.is_visible(".alert-success")
+        print("✅ Cancelación de cita Playwright exitosa")
+        browser.close()
