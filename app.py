@@ -415,7 +415,7 @@ def mis_citas_json():
             try:
                 app.logger.debug(f"Procesando cita ID: {cita.id}")
                 medico_data = employees_service.get_doctor_by_id(cita.medico_id)
-                app.logger.debug(f"Datos del médico: {medico_data}")
+                # app.logger.debug(f"Datos del médico: {medico_data}")
                 
                 medico_nombre = medico_data.get('name', 'Médico no encontrado') if medico_data else 'Médico no encontrado'
                 
@@ -427,7 +427,7 @@ def mis_citas_json():
                     'estado': cita.estado or 'desconocido',
                 }
                 citas_lista.append(cita_dict)
-                app.logger.debug(f"Cita procesada: {cita_dict}")
+                # app.logger.debug(f"Cita procesada: {cita_dict}")
                 
             except Exception as e:
                 app.logger.error(f"Error procesando cita {cita.id}: {str(e)}")
