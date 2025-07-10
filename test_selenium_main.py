@@ -46,11 +46,13 @@ def test_cancelar_cita_selenium():
         WebDriverWait(driver, 10).until(
             EC.url_contains("dashboard")
         )
-        # Ir a Mis Citas
-        driver.find_element(By.LINK_TEXT, "Mis Citas").click()
+        # Ir a Mis Citas (espera explícita y selector robusto)
+        WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.PARTIAL_LINK_TEXT, "Mis Citas"))
+        ).click()
         # Esperar botón cancelar y cancelar la primera cita
         WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.XPATH, "//button[contains(text(),'Cancelar')]"))
+            EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Cancelar')]"))
         ).click()
         # Verificar mensaje de éxito
         WebDriverWait(driver, 10).until(
